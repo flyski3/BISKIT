@@ -18,6 +18,5 @@ public class SingleIndustryRequest {
     private BigDecimal lng;
 
     @NotNull
-    @Positive
     private String categoryName;
 }

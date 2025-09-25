@@ -1,9 +1,8 @@
 package com.example.backend.recommend.service;
 
-import com.example.backend.recommend.dto.RecommendResponse;
-import com.example.backend.recommend.dto.SingleRequest;
-import com.example.backend.recommend.dto.SingleIndustryRequest;
-import com.example.backend.recommend.dto.Source;
+import com.example.backend.common.exception.BusinessException;
+import com.example.backend.recommend.dto.*;
+import com.example.backend.recommend.exception.RecommendErrorCode;
 import com.example.backend.recommend.infra.ai.AiResponseParser;
 import com.example.backend.recommend.infra.ai.AiServerClient;
 import com.example.backend.recommend.port.CategoryPort;
@@ -23,6 +22,7 @@ import java.util.Optional;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.HashSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,12 +39,7 @@ public class RecommendService {
     private final LoginSearchPort loginSearchPort;
 
     private static final Logger log = LoggerFactory.getLogger(RecommendService.class);
-    /**
-     * 일반(single): 좌표만 받아 모든 카테고리 데이터 반환
-     * - 카테고리별로 행 단위 저장하는 현재 스키마에서는
-     *   전체를 DB에서 한 번에 모으기 어렵기 때문에,
-     *   AI의 전체 응답을 받아 카테고리별로 upsert 하는 방식으로 단순화.
-     */
+
     @Transactional
     public RecommendResponse generateSingle(SingleRequest req, Long uid) {
         final BigDecimal lat = req.getLat();
@@ -56,7 +51,6 @@ public class RecommendService {
         // 2) AI 서버 호출(모든 카테고리)
         JsonNode aiRaw = aiServerClient.requestAll(bld.lat(), bld.lng());
         Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
-//        Map<String, List<Double>> aijson = aiResponseParser.toCategoryMetricListV2(aiRaw);
         // category table에 없는건 skip
         Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
 
@@ -99,11 +93,6 @@ public class RecommendService {
                 .build();
     }
 
-    /**
-     * 인더스트리(single-industry): 좌표 + categoryId 한 개만 반환
-     * - (building, category) 단건을 캐시→DB에서 조회,
-     *   없으면 AI 호출 후 upsert.
-     */
     @Transactional
     public RecommendResponse generateSingleIndustry(SingleIndustryRequest req, Long uid) {
         final BigDecimal lat = req.getLat();
@@ -124,9 +113,26 @@ public class RecommendService {
             source = Source.DB;
         } else {
             // 3) 없으면 AI 서버 호출 → Double 파싱 후 upsert
-            JsonNode aiRaw = aiServerClient.requestCategory(bld.lat(), bld.lng(), categoryId);
-            value = aiResponseParser.toCategoryDouble(aiRaw, categoryName);
-            inOutPort.upsert(bld.id(), categoryId, value);
+            JsonNode aiRaw = aiServerClient.requestAll(bld.lat(), bld.lng());
+            Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
+            Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
+            byCat.forEach((name, values) -> {
+                Integer catId = nameToId.get(name);
+                if (catId == null) {
+                    return;
+                }
+                inOutPort.upsert(bld.id(), catId, values);
+            });
+            Optional<Double> hit2 = inOutPort.get(bld.id(), categoryId);
+            if(hit2.isPresent()) {
+                value = hit2.get();
+            }
+            else {
+                throw new BusinessException(
+                        RecommendErrorCode.AI_UPSTREAM_BAD_RESPONSE.getCommonCode(),
+                        "AI 응답이 틀립니다."
+                );
+            }
             source = Source.AI;
         }
 
@@ -155,6 +161,54 @@ public class RecommendService {
                         .version("v1")
                         .last_at(OffsetDateTime.now())
                         .build())
+                .build();
+    }
+
+    @Transactional
+    public RangeResponse getRange(RangeRequest req, Long uid) {
+        final String categoryName = req.getCategory();
+        final Integer categoryId   = categoryPort.getIdByName(categoryName);
+
+        record R(RangeRequest.Point pt, GeoBuildingService.ResolvedBuilding bld) {}
+        List<R> resolved = req.getPoints().stream()
+                .map(p -> new R(p, geoBuildingService.resolve(p.getLat(), p.getLng())))
+                .toList();
+
+        Set<Integer> ensured = new HashSet<>();
+        for (R r : resolved) {
+            int bldId = r.bld().id();
+            if (!ensured.add(bldId)) continue; // 이미 처리한 건물
+
+            if (inOutPort.get(bldId, categoryId).isEmpty()) {
+                // AI 전체 응답 한 번 받아 모든 카테고리 upsert
+                JsonNode aiRaw = aiServerClient.requestAll(r.bld().lat(), r.bld().lng());
+                Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
+                Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
+                byCat.forEach((name, v) -> {
+                    Integer cid = nameToId.get(name);
+                    if (cid != null) inOutPort.upsert(bldId, cid, v);
+                });
+            }
+
+            if (uid != null) {
+                loginSearchPort.upsertubid(uid, bldId);
+                searchCategoryPort.upsertubcS(uid, bldId, Set.of(categoryId));
+            }
+        }
+
+        List<RangeResponse.Item> items = resolved.stream().map(r -> {
+            Double v = inOutPort.get(r.bld().id(), categoryId).orElse(null);
+            return RangeResponse.Item.builder()
+                    .buildingId(r.bld().id())
+                    .category(categoryName)
+                    .lat(r.pt().getLat())   // 숫자(BigDecimal) 유지
+                    .lng(r.pt().getLng())   // 숫자(BigDecimal) 유지
+                    .survivalRate(v == null ? List.of() : List.of(v)) // 배열로
+                    .build();
+        }).toList();
+
+        return RangeResponse.builder()
+                .items(items)
                 .build();
     }
 }
