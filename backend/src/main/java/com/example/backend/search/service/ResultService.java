@@ -1,5 +1,7 @@
 package com.example.backend.search.service;
 
+import com.example.backend.common.exception.ErrorCode;
+import com.example.backend.common.exception.BusinessException;
 import com.example.backend.search.dto.*;
 import com.example.backend.search.port.LoginSearchPort;
 import com.example.backend.search.port.SearchCategoryPort;
@@ -104,6 +106,8 @@ public class ResultService {
     @Transactional
     public ResultDeleteResponse deleteBuilding(Long userId, int buildingId) {
 
+        if(loginSearchPort.isFavorite(userId,buildingId))
+            throw new BusinessException(ErrorCode.COMMON_INVALID_REQUEST,"찜 상태는 삭제할 수 없습니다");
         int affected = loginSearchPort.delete(userId, buildingId);
 
         return ResultDeleteResponse.builder()
