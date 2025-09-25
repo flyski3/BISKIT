@@ -21,7 +21,6 @@ import org.springframework.security.web.context.RequestAttributeSecurityContextR
 /**
  * JWT 쿠키 기반 Security 설정 (CSRF 토큰 없음)
  * SameSite 쿠키와 Origin 검증으로 CSRF 보호
- * Reactive(Mono/Flux) 응답 지원 추가
  */
 @Configuration
 @EnableWebSecurity
@@ -43,8 +42,13 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // CSRF 비활성화 (SameSite 쿠키로 대체)
                 .csrf(AbstractHttpConfigurer::disable)
+
+                // CORS 설정
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+                // 세션을 Stateless로 설정
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // ⬇️ 여기 추가 (STATLESS + 비동기 친화 저장소)
@@ -59,7 +63,12 @@ public class SecurityConfig {
                         .requestMatchers(SecurityPaths.PUBLIC_PATHS).permitAll()
                         .requestMatchers("/error", "/favicon.ico").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ai/single").permitAll()
+                        // 나머지 모든 요청은 인증 필요
                         .anyRequest().authenticated())
+
+                // JWT 인증 필터 추가
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((req, res, ex) -> {
@@ -78,7 +87,6 @@ public class SecurityConfig {
                         .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline'")))
                 .build();
     }
-
 
     /**
      * CORS 설정 (쿠키 전송을 위해 credentials 허용)
