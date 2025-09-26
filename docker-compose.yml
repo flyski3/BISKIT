@@ -137,7 +137,7 @@ services:
 volumes:
   mysql_data:
   redis_data:
-  gradle-cache: # 🎯 Gradle 캐시 볼륨 추가
+  gradle-cache:
 
 networks:
   my-network:
