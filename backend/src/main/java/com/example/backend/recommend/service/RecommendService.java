@@ -24,8 +24,6 @@ import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.HashSet;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 @Service
 @RequiredArgsConstructor
 public class RecommendService {
@@ -38,8 +36,6 @@ public class RecommendService {
     private final SearchCategoryPort searchCategoryPort;
     private final LoginSearchPort loginSearchPort;
 
-    private static final Logger log = LoggerFactory.getLogger(RecommendService.class);
-
     @Transactional
     public RecommendResponse generateSingle(SingleRequest req, Long uid) {
         final BigDecimal lat = req.getLat();
@@ -51,10 +47,8 @@ public class RecommendService {
         // 2) AI 서버 호출(모든 카테고리)
         JsonNode aiRaw = aiServerClient.requestAll(bld.lat(), bld.lng());
         Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
-        // category table에 없는건 skip
         Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
 
-        log.info("e"+nameToId);
         List<RecommendResponse.CategoryResult> resultList = new ArrayList<>();
         Set<Integer> cidSet = new LinkedHashSet<>();
         byCat.forEach((name, value) -> {
