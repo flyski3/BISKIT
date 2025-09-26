@@ -27,18 +27,6 @@ public class AiResponseParser {
         return out;
     }
 
-//    /** 단일 카테고리 → Double */
-//    public Double toCategoryDouble(JsonNode aiResponse, String categoryId) {
-//        JsonNode data = requireData(aiResponse);
-//        if (!data.has(categoryId)) {
-//            throw new BusinessException(
-//                    RecommendErrorCode.AI_UPSTREAM_BAD_RESPONSE.getCommonCode(),
-//                    "AI 응답에 카테고리 없음: " + categoryId
-//            );
-//        }
-//        return extractDouble(data.get(categoryId), categoryId);
-//    }
-
     /** 저장/조회 일관성을 위한 키 규칙 */
 
     // ---------- 내부 유틸 ----------
