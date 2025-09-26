@@ -74,7 +74,8 @@ public class ResultService {
 
             var cids = BCL.getOrDefault(bid, List.of());
             var rows = inOutRows.getOrDefault(bid, List.of());
-            Map<Integer, Double> resultByCid = rows.stream()
+
+            Map<Integer, List<Double>> resultByCid = rows.stream()
                     .collect(Collectors.toMap(
                             InOutPort.InOutResult::categoryId,
                             InOutPort.InOutResult::result,
@@ -84,10 +85,10 @@ public class ResultService {
             List<ResultGetResponse.Category> categories = new ArrayList<>(cids.size());
             for (int cid : cids) {
                 String name = cidToName.get(cid);         // 없으면 null 허용
-                Double survival = resultByCid.get(cid);   // 없으면 null
+                List<Double> survivalRates = resultByCid.getOrDefault(cid, java.util.List.of());
                 categories.add(ResultGetResponse.Category.builder()
                         .category(name)
-                        .survivalRate(survival)
+                        .survivalRate(survivalRates)
                         .build());
             }
 

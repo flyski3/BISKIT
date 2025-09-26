@@ -46,7 +46,7 @@ public class RecommendService {
 
         // 2) AI 서버 호출(모든 카테고리)
         JsonNode aiRaw = aiServerClient.requestAll(bld.lat(), bld.lng());
-        Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
+        Map<String, List<Double>> byCat = aiResponseParser.toCategoryMetricListV2(aiRaw);
         Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
 
         List<RecommendResponse.CategoryResult> resultList = new ArrayList<>();
@@ -98,9 +98,9 @@ public class RecommendService {
         GeoBuildingService.ResolvedBuilding bld = geoBuildingService.resolve(lat, lng);
 
         // 2) 캐시 → DB 조회
-        Optional<Double> hit = inOutPort.get(bld.id(), categoryId);
+        Optional<List<Double>> hit = inOutPort.get(bld.id(), categoryId);
 
-        double value;
+        List<Double> value;
         Source source;
         if (hit.isPresent()) {
             value = hit.get();
@@ -108,7 +108,7 @@ public class RecommendService {
         } else {
             // 3) 없으면 AI 서버 호출 → Double 파싱 후 upsert
             JsonNode aiRaw = aiServerClient.requestAll(bld.lat(), bld.lng());
-            Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
+            Map<String, List<Double>> byCat = aiResponseParser.toCategoryMetricListV2(aiRaw);
             Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
             byCat.forEach((name, values) -> {
                 Integer catId = nameToId.get(name);
@@ -117,7 +117,7 @@ public class RecommendService {
                 }
                 inOutPort.upsert(bld.id(), catId, values);
             });
-            Optional<Double> hit2 = inOutPort.get(bld.id(), categoryId);
+            Optional<List<Double>> hit2 = inOutPort.get(bld.id(), categoryId);
             if(hit2.isPresent()) {
                 value = hit2.get();
             }
@@ -176,7 +176,7 @@ public class RecommendService {
             if (inOutPort.get(bldId, categoryId).isEmpty()) {
                 // AI 전체 응답 한 번 받아 모든 카테고리 upsert
                 JsonNode aiRaw = aiServerClient.requestAll(r.bld().lat(), r.bld().lng());
-                Map<String, Double> byCat = aiResponseParser.toCategoryDoubleMap(aiRaw);
+                Map<String, List<Double>> byCat = aiResponseParser.toCategoryMetricListV2(aiRaw);
                 Map<String, Integer> nameToId = categoryPort.getIdsByNames(byCat.keySet());
                 byCat.forEach((name, v) -> {
                     Integer cid = nameToId.get(name);
@@ -191,13 +191,13 @@ public class RecommendService {
         }
 
         List<RangeResponse.Item> items = resolved.stream().map(r -> {
-            Double v = inOutPort.get(r.bld().id(), categoryId).orElse(null);
+            List<Double> v = inOutPort.get(r.bld().id(), categoryId).orElse(null);
             return RangeResponse.Item.builder()
                     .buildingId(r.bld().id())
                     .category(categoryName)
                     .lat(r.pt().getLat())   // 숫자(BigDecimal) 유지
                     .lng(r.pt().getLng())   // 숫자(BigDecimal) 유지
-                    .survivalRate(v == null ? List.of() : List.of(v)) // 배열로
+                    .survivalRate(v)
                     .build();
         }).toList();
 
