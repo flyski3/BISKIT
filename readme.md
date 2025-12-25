@@ -1,3 +1,9 @@
+현재 파일 용량 제한 및 시크릿 룰의 이유로 다음 3개의 파일이 누락되어 있습니다.
+핵심 ai 모델 : ai/data/edge_index_reco.npy
+ai 모델 사용 data : ai/data/STORE.csv
+cicd 설명 : exec/CICD.md
+
+
 # BISKIT: 사업 시작 키트 (Business Starter KIT)
 
 **BISKIT**(Business Starter KIT)은 창업가와 예비 사업자가 **데이터 기반 의사결정**을 할 수 있도록 돕는
