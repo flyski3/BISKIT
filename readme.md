@@ -1,9 +1,8 @@
 현재 파일 용량 제한 및 시크릿 룰의 이유로 다음 3개의 파일이 누락되어 있습니다.
----
-핵심 ai 모델 : ai/data/edge_index_reco.npy
-ai 모델 사용 data : ai/data/STORE.csv
-cicd 설명 : exec/CICD.md
----
+
+- 핵심 ai 모델: `ai/data/edge_index_reco.npy`
+- ai 모델 사용 data: `ai/data/STORE.csv`
+- ci/cd 설명: `exec/CICD.md`
 
 # BISKIT: 사업 시작 키트 (Business Starter KIT)
 
